@@ -1,0 +1,83 @@
+name: Build Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Tauri application
+        run: npm run tauri-build
+
+      - name: Find built .exe file
+        id: find-exe
+        shell: powershell
+        run: |
+          $exeFiles = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis" -Filter "*.exe" -Recurse
+          if ($exeFiles.Count -gt 0) {
+            $exePath = $exeFiles[0].FullName
+            Write-Host "Found EXE: $exePath"
+            echo "exe_path=$exePath" >> $env:GITHUB_OUTPUT
+            echo "exe_exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "exe_exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "No EXE file found!"
+          }
+
+      - name: Upload artifact
+        if: steps.find-exe.outputs.exe_exists == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: Image-Enhancer-Installer
+          path: ${{ steps.find-exe.outputs.exe_path }}
+
+      - name: Create Release on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.find-exe.outputs.exe_path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Latest Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          files: ${{ steps.find-exe.outputs.exe_path }}
+          draft: false
+          prerelease: true
+          body: "Latest build from main branch"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
