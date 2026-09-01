@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload artifact
         if: steps.find-exe.outputs.exe_exists == 'true'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Image-Enhancer-Installer
           path: ${{ steps.find-exe.outputs.exe_path }}
